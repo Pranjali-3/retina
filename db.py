@@ -1,57 +1,25 @@
-import pymysql
+import sqlite3
 import hashlib
+from datetime import datetime
 
 # -------------------------------
-# 🔹 DATABASE CONFIG
+# 🔹 DATABASE CONFIG (SQLite is just a file!)
 # -------------------------------
-DB_NAME = "retino_db"
-
-DB_CONFIG = {
-    "host": "localhost",
-    "user": "root",
-    "password": "root",
-    "cursorclass": pymysql.cursors.DictCursor
-}
-
-
-# -------------------------------
-# 🔹 CREATE DATABASE IF NOT EXISTS
-# -------------------------------
-def create_database():
-    try:
-        conn = pymysql.connect(
-            host=DB_CONFIG["host"],
-            user=DB_CONFIG["user"],
-            password=DB_CONFIG["password"]
-        )
-
-        with conn.cursor() as cursor:
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}")
-
-        conn.close()
-
-    except Exception as e:
-        print("Error creating database:", e)
-
+DB_NAME = "retino_db.sqlite"
 
 # -------------------------------
 # 🔹 CONNECT TO DATABASE
 # -------------------------------
 def get_connection():
     try:
-        conn = pymysql.connect(
-            host=DB_CONFIG["host"],
-            user=DB_CONFIG["user"],
-            password=DB_CONFIG["password"],
-            database=DB_NAME,
-            cursorclass=pymysql.cursors.DictCursor
-        )
+        # SQLite creates the file automatically if it doesn't exist
+        conn = sqlite3.connect(DB_NAME, check_same_thread=False)
+        # This makes results behave like a Dictionary (matching your MySQL DictCursor)
+        conn.row_factory = sqlite3.Row
         return conn
-
     except Exception as e:
-        print("Error connecting to MySQL:", e)
+        print("Error connecting to SQLite:", e)
         return None
-
 
 # -------------------------------
 # 🔹 CREATE TABLES
@@ -59,40 +27,40 @@ def get_connection():
 def create_tables():
     conn = get_connection()
     if conn:
-        with conn.cursor() as cursor:
+        cursor = conn.cursor()
+        
+        # User Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            email TEXT UNIQUE,
+            password TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
 
-            cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(100),
-                email VARCHAR(100) UNIQUE,
-                password VARCHAR(255),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """)
-
-            cursor.execute("""
-            CREATE TABLE IF NOT EXISTS predictions (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT,
-                image_path VARCHAR(255),
-                prediction VARCHAR(50),
-                confidence FLOAT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )
-            """)
+        # Predictions Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS predictions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            image_path TEXT,
+            prediction TEXT,
+            confidence REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """)
 
         conn.commit()
         conn.close()
 
-
 # -------------------------------
-# 🔐 HASH PASSWORD
+# 🔐 HASH PASSWORD (Stays the same!)
 # -------------------------------
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
-
 
 # -------------------------------
 # 👤 REGISTER USER
@@ -101,24 +69,20 @@ def register_user(name, email, password):
     conn = get_connection()
     if conn:
         try:
-            with conn.cursor() as cursor:
-                hashed_pw = hash_password(password)
-
-                cursor.execute("""
-                INSERT INTO users (name, email, password)
-                VALUES (%s, %s, %s)
-                """, (name, email, hashed_pw))
-
+            cursor = conn.cursor()
+            hashed_pw = hash_password(password)
+            # SQLite uses ? instead of %s
+            cursor.execute("""
+            INSERT INTO users (name, email, password)
+            VALUES (?, ?, ?)
+            """, (name, email, hashed_pw))
             conn.commit()
             return True
-
         except Exception as e:
             print("Registration Error:", e)
             return False
-
         finally:
             conn.close()
-
 
 # -------------------------------
 # 🔑 LOGIN USER
@@ -127,19 +91,18 @@ def login_user(email, password):
     conn = get_connection()
     if conn:
         try:
-            with conn.cursor() as cursor:
-                hashed_pw = hash_password(password)
-
-                cursor.execute("""
-                SELECT * FROM users
-                WHERE email=%s AND password=%s
-                """, (email, hashed_pw))
-
-                return cursor.fetchone()
-
+            cursor = conn.cursor()
+            hashed_pw = hash_password(password)
+            cursor.execute("""
+            SELECT * FROM users
+            WHERE email=? AND password=?
+            """, (email, hashed_pw))
+            
+            row = cursor.fetchone()
+            # Convert row to dict to keep your app logic working
+            return dict(row) if row else None
         finally:
             conn.close()
-
 
 # -------------------------------
 # 📊 SAVE PREDICTION
@@ -148,17 +111,14 @@ def save_prediction(user_id, image_path, prediction, confidence):
     conn = get_connection()
     if conn:
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("""
-                INSERT INTO predictions (user_id, image_path, prediction, confidence)
-                VALUES (%s, %s, %s, %s)
-                """, (user_id, image_path, prediction, confidence))
-
+            cursor = conn.cursor()
+            cursor.execute("""
+            INSERT INTO predictions (user_id, image_path, prediction, confidence)
+            VALUES (?, ?, ?, ?)
+            """, (user_id, image_path, prediction, confidence))
             conn.commit()
-
         finally:
             conn.close()
-
 
 # -------------------------------
 # 📜 GET USER HISTORY
@@ -167,30 +127,26 @@ def get_user_history(user_id):
     conn = get_connection()
     if conn:
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("""
-                SELECT * FROM predictions
-                WHERE user_id=%s
-                ORDER BY created_at DESC
-                """, (user_id,))
-
-                return cursor.fetchall()
-
+            cursor = conn.cursor()
+            cursor.execute("""
+            SELECT * FROM predictions
+            WHERE user_id=?
+            ORDER BY created_at DESC
+            """, (user_id,))
+            
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
         finally:
             conn.close()
 
-
 # -------------------------------
-# 🚀 INIT FUNCTION (IMPORTANT)
+# 🚀 INIT FUNCTION
 # -------------------------------
 def init_db():
-    create_database()   # ✅ Create DB if not exists
-    create_tables()     # ✅ Then create tables
+    # SQLite doesn't need a 'create_database' function 
+    # as connect() does it automatically.
+    create_tables() 
 
-
-# -------------------------------
-# ▶️ RUN DIRECTLY
-# -------------------------------
 if __name__ == "__main__":
     init_db()
-    print("✅ Database + Tables Ready!")
+    print("✅ SQLite Database + Tables Ready!")
