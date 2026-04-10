@@ -56,15 +56,40 @@ def history_to_csv(history: list) -> bytes:
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["ID", "Date", "File", "Prediction", "Confidence (%)"])
+    
     for row in history:
-        date = row["created_at"].strftime("%Y-%m-%d %H:%M") if row.get("created_at") else ""
+        # 1. Handle SQLite Row vs Dict
+        # If it's a sqlite3.Row, we convert it to a dict for easy .get() usage
+        if not isinstance(row, dict):
+            row = dict(row)
+            
+        # 2. Robust Date Formatting
+        raw_date = row.get("created_at")
+        date_str = ""
+        
+        if raw_date:
+            # If it's a MySQL datetime object
+            if hasattr(raw_date, 'strftime'):
+                date_str = raw_date.strftime("%Y-%m-%d %H:%M")
+            # If it's a SQLite string (e.g., '2023-10-27 10:30:59')
+            else:
+                date_str = str(raw_date)[:16]
+        
+        # 3. Handle Confidence Formatting Safely
+        try:
+            conf_val = float(row.get('confidence', 0))
+            conf_str = f"{conf_val:.1f}"
+        except (ValueError, TypeError):
+            conf_str = "0.0"
+
         writer.writerow([
             row.get("id", ""),
-            date,
+            date_str,
             row.get("image_path", ""),
             row.get("prediction", ""),
-            f"{row.get('confidence') or 0:.1f}",
+            conf_str,
         ])
+        
     return output.getvalue().encode("utf-8")
 
 
