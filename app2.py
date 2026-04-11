@@ -57,7 +57,17 @@ def history_to_csv(history: list) -> bytes:
     writer = csv.writer(output)
     writer.writerow(["ID", "Date", "File", "Prediction", "Confidence (%)"])
     for row in history:
-        date = row["created_at"].strftime("%Y-%m-%d %H:%M") if row.get("created_at") else ""
+        raw_date = row.get("created_at")
+        if raw_date:
+            if hasattr(raw_date, 'strftime'):
+                date = raw_date.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                try:
+                    date = str(raw_date).replace("-", "/")[0:19]
+                except:
+                    date = str(raw_date)
+        else:
+            date = ""
         writer.writerow([
             row.get("id", ""),
             date,
