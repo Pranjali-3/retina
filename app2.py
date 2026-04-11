@@ -249,7 +249,15 @@ def page_dashboard():
             for row in history[:5]:
                 conf = row.get("confidence") or 0
                 pred = row.get("prediction", "Unknown")
-                date = row["created_at"].strftime("%b %d, %Y %H:%M") if row.get("created_at") else "—"
+                raw_date = row.get("created_at")
+                if raw_date:
+                    if hasattr(raw_date, 'strftime'):
+                        date = raw_date.strftime("%b %d, %Y %H:%M")
+                    else:
+                        try:
+                            date = str(raw_date).replace("-", "/")[0:16]
+                        except:
+                            date = str(raw_date)
                 st.markdown(f"""
                 <div style="display:flex;justify-content:space-between;align-items:center;
                             padding:0.7rem 1rem;border-radius:8px;margin-bottom:0.5rem;
