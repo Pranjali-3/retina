@@ -187,6 +187,8 @@ def render_sidebar():
 def page_dashboard():
     import pandas as pd
     from collections import Counter
+    last_scan_str = "—" 
+    last_scan = None
 
     st.markdown(f"## 👋 Welcome back, {st.session_state.user_name}")
     st.caption("Here's your retinal screening summary")
