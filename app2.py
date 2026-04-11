@@ -56,40 +56,15 @@ def history_to_csv(history: list) -> bytes:
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["ID", "Date", "File", "Prediction", "Confidence (%)"])
-    
     for row in history:
-        # 1. Handle SQLite Row vs Dict
-        # If it's a sqlite3.Row, we convert it to a dict for easy .get() usage
-        if not isinstance(row, dict):
-            row = dict(row)
-            
-        # 2. Robust Date Formatting
-        raw_date = row.get("created_at")
-        date_str = ""
-        
-        if raw_date:
-            # If it's a MySQL datetime object
-            if hasattr(raw_date, 'strftime'):
-                date_str = raw_date.strftime("%Y-%m-%d %H:%M")
-            # If it's a SQLite string (e.g., '2023-10-27 10:30:59')
-            else:
-                date_str = str(raw_date)[:16]
-        
-        # 3. Handle Confidence Formatting Safely
-        try:
-            conf_val = float(row.get('confidence', 0))
-            conf_str = f"{conf_val:.1f}"
-        except (ValueError, TypeError):
-            conf_str = "0.0"
-
+        date = row["created_at"].strftime("%Y-%m-%d %H:%M") if row.get("created_at") else ""
         writer.writerow([
             row.get("id", ""),
-            date_str,
+            date,
             row.get("image_path", ""),
             row.get("prediction", ""),
-            conf_str,
+            f"{row.get('confidence') or 0:.1f}",
         ])
-        
     return output.getvalue().encode("utf-8")
 
 
@@ -470,20 +445,31 @@ def page_history():
     for row in filtered:
         pred = row.get("prediction", "Unknown")
         conf = row.get("confidence") or 0
-        date = row["created_at"].strftime("%B %d, %Y — %H:%M") if row.get("created_at") else "—"
+        raw_date = row.get("created_at")
+        raw_date = row.get("created_at")
+        if raw_date:
+            if hasattr(raw_date, 'strftime'):
+                date_display = raw_date.strftime("%B %d, %Y — %H:%M")
+            else:
+                try:
+                    date_display = str(raw_date).replace("-", "/")[0:16]
+                except:
+                    date_display = str(raw_date)
+        else:
+            date_display = "—"
         fname = row.get("image_path", "—")
 
-        with st.expander(f"🗓️ {date}  ·  {pred}  ·  {fname}", expanded=False):
+        with st.expander(f"🗓️ {date_display}  ·  {pred}  ·  {fname}", expanded=False):
             c1, c2 = st.columns(2)
             c1.markdown(f"**Diagnosis:** {severity_badge(pred)}", unsafe_allow_html=True)
             c1.markdown(f"**Confidence:** `{conf:.1f}%`")
             c2.markdown(f"**File:** `{fname}`")
-            c2.markdown(f"**Date:** {date}")
+            c2.markdown(f"**Date:** {date_display}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  ROUTER
-# ═══════════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════
 if not st.session_state.logged_in:
     page_login()
 else:
