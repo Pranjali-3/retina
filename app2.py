@@ -199,7 +199,14 @@ def page_dashboard():
     # ── Metrics (no avg confidence) ──
     total = len(history)
     last_scan = history[0]["created_at"] if history else None
-    last_scan_str = last_scan.strftime("%b %d, %Y") if last_scan else "—"
+    if last_scan:
+        if hasattr(last_scan, 'strftime'):
+            last_scan_str = last_scan.strftime("%b %d, %Y")
+        else:
+            try:
+                last_scan_str = str(last_scan).replace("-", "/")[0:10]
+            except:
+                last_scan_str = str(last_scan)
     last_pred = history[0].get("prediction", "—") if history else "—"
 
     c1, c2, c3 = st.columns(3)
